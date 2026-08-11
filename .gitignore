@@ -1,0 +1,37 @@
+# =============================================================================
+# Git tracks the code only — the .R scripts and project files.
+#
+# It does NOT track data or results: input files are immutable, and derived
+# outputs are regenerable by re-running the scripts. Excluding both keeps the
+# repository small and makes it unable to carry participant data.
+# =============================================================================
+
+# --- Derived / regenerable outputs (re-runnable from scripts) ---
+derived/
+**/derived/
+
+# --- Manual pre-run data snapshots (regenerable; never versioned) ---
+_backups/
+
+# --- Data files (raw inputs + saved data objects) ---
+*.csv
+*.rds
+*.RData
+*.rda
+
+# --- Figures / binary outputs ---
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.tiff
+
+# --- R / RStudio session cruft ---
+.Rproj.user/
+.Rhistory
+.Rapp.history
+.Ruserdata
+
+# --- macOS ---
+.DS_Store
+.positai
