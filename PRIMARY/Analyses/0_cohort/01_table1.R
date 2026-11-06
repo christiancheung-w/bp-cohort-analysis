@@ -7,7 +7,7 @@
 #
 # Retires cohort_characteristics.R (single producer for the cohort chapter).
 #
-# Run with working directory = project root (dID_Analysis.Rproj folder).
+# Run with working directory = project root (bp.Rproj folder).
 #
 # Outputs (Analyses/0_cohort/derived/results/):
 #   table_1.csv / table_1_paper.md            — paper Table 1 (hypertensive)

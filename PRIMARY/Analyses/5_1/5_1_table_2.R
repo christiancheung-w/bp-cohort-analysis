@@ -1,6 +1,6 @@
 # 5_1_table_2.R
 # SAP §5.1 Table 2: per-stratum Δ in mmHg (unadjusted + adjusted side-by-side),
-# Cohen's d_z (standardized paired effect size, supplementary), and cross-
+# Cohen's d (baseline-SD standardized effect size, supplementary), and cross-
 # stratum Δ-difference contrasts. For SBP and DBP.
 #
 # p-values reported from the ADJUSTED LMM (the fuller spec incl. baseline-HTN),
@@ -8,11 +8,14 @@
 # (estimation-first). Raw + unadjusted-model + adjusted p-values are all exported
 # in the CSVs for transparency.
 #
-# Cohen's d_z definition used here:
-#   d_z = LMM Δ (mmHg) / SD of empirical paired within-user differences
-# The denominator uses raw within-user paired differences (purely empirical,
-# decoupled from LMM variance assumptions). Numerator uses the LMM emmean Δ
-# for consistency with the rest of the table.
+# Cohen's d definition used here (harmonized with §5.5 Table S3):
+#   d = adjusted LMM Δ (mmHg) / pooled baseline SD of the outcome
+# Denominator = SD of baseline BP across the full analytic cohort (all strata
+# pooled, one value per outcome), following Kazis et al. (Med Care 1989). Pooled
+# rather than per-stratum to avoid range restriction from baseline-defined
+# strata, and it uses fully-observed baseline BP (robust to follow-up attrition).
+# Numerator = adjusted emmean Δ, matching the primary estimate. Signed
+# (negative = BP reduction).
 #
 # Inputs:
 #   Analyses/5_1/derived/emmeans_results.rds
@@ -33,6 +36,18 @@ dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
 
 emmeans_results <- read_rds(emm_path)
 user_frame      <- read_rds(uf_path)
+
+# --- Cohort baseline SD: denominator for Cohen's d (one value per outcome) ---
+# Pooled across strata to avoid range restriction from baseline-defined strata;
+# uses fully-observed baseline BP (robust to follow-up attrition). Kazis (1989).
+baseline_sd <- user_frame %>%
+  filter(BASELINE_AHA %in% c("Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"),
+         SEX %in% c("male", "female")) %>%
+  summarise(SBP = sd(BASELINE_SBP, na.rm = TRUE),
+            DBP = sd(BASELINE_DBP, na.rm = TRUE)) %>%
+  unlist()
+cat("Cohort baseline SD (Cohen's d denominator):\n")
+cat("  SBP:", round(baseline_sd[["SBP"]], 4), " DBP:", round(baseline_sd[["DBP"]], 4), "\n\n")
 
 # --- CI columns: detect if present, else derive from estimate + SE + df ---
 # emmeans `contrast()` does not include CI columns by default; derive Wald CIs
@@ -55,9 +70,9 @@ ensure_ci <- function(dat) {
   dat
 }
 
-# --- Compute empirical paired-difference SDs (denominator for Cohen's d_z) ---
-# One row per (outcome × stratum × timepoint): n_paired + sd_diff
-paired_sd <- user_frame %>%
+# --- Per-cell paired counts (n contributing a baseline+timepoint pair) ---
+# One row per (outcome × stratum × timepoint): n_paired.
+paired_n <- user_frame %>%
   filter(BASELINE_AHA %in% c("Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"),
          SEX %in% c("male", "female")) %>%
   select(STUDY_ID, BASELINE_AHA,
@@ -76,13 +91,11 @@ paired_sd <- user_frame %>%
                values_to = "paired_diff") %>%
   filter(!is.na(paired_diff)) %>%
   group_by(outcome, BASELINE_AHA, timepoint) %>%
-  summarise(n_paired = n(),
-            sd_diff  = sd(paired_diff),
-            .groups = "drop") %>%
+  summarise(n_paired = n(), .groups = "drop") %>%
   mutate(stratum = factor(BASELINE_AHA,
                           levels = c("Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"),
                           labels = c("Elevated", "Stage 1", "Stage 2"))) %>%
-  select(outcome, stratum, timepoint, n_paired, sd_diff)
+  select(outcome, stratum, timepoint, n_paired)
 
 # --- Pull within-stratum Δ for unadjusted + adjusted ---
 extract_within <- function(tib, outcome_label, model_label) {
@@ -115,15 +128,15 @@ within_wide <- within_rows %>%
   pivot_wider(names_from = model,
               values_from = c(delta, lcl, ucl, p, p_holm),
               names_glue  = "{model}_{.value}") %>%
-  left_join(paired_sd, by = c("outcome", "stratum", "timepoint")) %>%
+  left_join(paired_n, by = c("outcome", "stratum", "timepoint")) %>%
   mutate(
-    d_z = unadj_delta / sd_diff   # standardized using unadj Δ as numerator
+    d_baseline = adj_delta / unname(baseline_sd[outcome])   # adjusted Δ / pooled baseline SD (signed)
   ) %>%
-  arrange(outcome, stratum, timepoint) %>%
-  select(outcome, stratum, timepoint, n_paired, sd_diff,
+  arrange(factor(outcome, levels = c("SBP", "DBP")), stratum, timepoint) %>%
+  select(outcome, stratum, timepoint, n_paired,
          unadj_delta, unadj_lcl, unadj_ucl, unadj_p, unadj_p_holm,
          adj_delta,   adj_lcl,   adj_ucl,   adj_p,   adj_p_holm,
-         d_z)
+         d_baseline)
 
 write_csv(within_wide, file.path(results_dir, "5_1_table_2_within_stratum.csv"))
 
@@ -167,7 +180,7 @@ cross_wide <- cross_rows %>%
   pivot_wider(names_from = model,
               values_from = c(diff, lcl, ucl, p, p_holm),
               names_glue  = "{model}_{.value}") %>%
-  arrange(outcome, timepoint, pair) %>%
+  arrange(factor(outcome, levels = c("SBP", "DBP")), timepoint, pair) %>%
   select(outcome, timepoint, pair,
          unadj_diff, unadj_lcl, unadj_ucl, unadj_p, unadj_p_holm,
          adj_diff,   adj_lcl,   adj_ucl,   adj_p,   adj_p_holm)
@@ -179,11 +192,7 @@ fmt_ci <- function(est, lcl, ucl, digits = 2) {
   sprintf("%.*f (%.*f, %.*f)", digits, est, digits, lcl, digits, ucl)
 }
 fmt_p <- function(p) {
-  ifelse(p < 1e-300, "<1e-300",
-  ifelse(p < 1e-10,  formatC(p, format = "e", digits = 1),
-  ifelse(p < 0.001,  formatC(p, format = "e", digits = 1),
-  ifelse(p < 0.01,   sprintf("%.3f", p),
-                     sprintf("%.3f", p)))))
+  ifelse(p < 0.001, "<0.001", sprintf("%.3f", p))
 }
 
 within_md <- within_wide %>%
@@ -191,12 +200,12 @@ within_md <- within_wide %>%
     `Δ unadj (95% CI)` = fmt_ci(unadj_delta, unadj_lcl, unadj_ucl),
     `Δ adj (95% CI)`   = fmt_ci(adj_delta,   adj_lcl,   adj_ucl),
     `p (adj, Holm)`    = fmt_p(adj_p_holm),
-    `Cohen's d_z`      = sprintf("%.3f", d_z),
+    `Cohen's d`        = sprintf("%.3f", d_baseline),
     n_paired           = format(n_paired, big.mark = ",")
   ) %>%
   select(Outcome = outcome, Stratum = stratum, Timepoint = timepoint,
          `n (paired)` = n_paired,
-         `Δ unadj (95% CI)`, `Δ adj (95% CI)`, `p (adj, Holm)`, `Cohen's d_z`)
+         `Δ unadj (95% CI)`, `Δ adj (95% CI)`, `p (adj, Holm)`, `Cohen's d`)
 
 cross_md <- cross_wide %>%
   mutate(
@@ -227,7 +236,7 @@ md_lines <- c(
   "- AHA reference level: Elevated. Time reference: BASELINE.",
   "- 95% CIs are asymptotic (z-based) Wald intervals from emmeans.",
   "- p-values shown are from the **adjusted** LMM (the fuller spec incl. baseline-HTN), **Holm-adjusted within contrast family**. The primary within-stratum Δ is led by its 95% CI (estimation-first); raw and unadjusted-model p-values are in the CSV exports.",
-  "- Cohen's d_z = (unadjusted LMM Δ) / (SD of empirical within-user paired differences). Supplementary effect-size summary."
+  "- Cohen's d = (adjusted LMM Δ) / (pooled baseline SD of the outcome, all strata combined; Kazis et al., Med Care 1989). Signed (negative = BP reduction). Harmonized with §5.5 Table S3. Supplementary effect-size summary."
 )
 writeLines(md_lines, file.path(results_dir, "5_1_table_2_paper.md"))
 

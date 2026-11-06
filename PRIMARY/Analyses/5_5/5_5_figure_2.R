@@ -110,9 +110,9 @@ limits_df <- bind_rows(
 ) %>%
   mutate(outcome = factor(outcome, levels = c(sbp_lab, dbp_lab)))
 
-# Stratum palette: Stage 1/2 AHA-chart hues; Elevated navy-grey (#44546A) — matched
-# to Fig 1A / the abstract (recoloured from AHA gold per the 2026-06 review).
-stratum_cols <- c("Elevated" = "#44546A", "Stage 1" = "#FFB600", "Stage 2" = "#BB3A03")
+# Stratum palette: all three AHA-chart hues. Elevated = AHA yellow (#EDCE44),
+# matched to Fig 1A and the §5.5 category color so Elevated always reads as its AHA colour.
+stratum_cols <- c("Elevated" = "#EDCE44", "Stage 1" = "#FFB600", "Stage 2" = "#BB3A03")
 
 p <- ggplot(plot_df, aes(x = month, y = emmean, color = stratum, fill = stratum, group = stratum)) +
   geom_hline(data = cutoff_df, aes(yintercept = cutoff),
@@ -129,8 +129,8 @@ p <- ggplot(plot_df, aes(x = month, y = emmean, color = stratum, fill = stratum,
                      labels = c("Baseline", "3 Months", "6 Months", "12 Months")) +
   coord_cartesian(clip = "off") +
   scale_y_continuous(breaks = scales::breaks_width(5), expand = expansion(mult = c(0, 0))) +
-  scale_color_manual(values = stratum_cols, name = "AHA Baseline Stratum") +
-  scale_fill_manual(values  = stratum_cols, name = "AHA Baseline Stratum") +
+  scale_color_manual(values = stratum_cols, name = "Baseline AHA Stratum") +
+  scale_fill_manual(values  = stratum_cols, name = "Baseline AHA Stratum") +
   scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1),
                      name = "vs. Baseline", labels = c(`TRUE` = "p < 0.005", `FALSE` = "p ≥ 0.005")) +
   scale_linetype_manual(values = c(`TRUE` = "solid", `FALSE` = "dashed"),
@@ -139,7 +139,7 @@ p <- ggplot(plot_df, aes(x = month, y = emmean, color = stratum, fill = stratum,
          color = guide_legend(order = 1)) +
   labs(
     x = NULL, y = NULL,
-    title    = "12-Month Blood Pressure Trajectories by Baseline AHA Classification",
+    title    = "12-Month Blood Pressure Trajectories by Baseline AHA Stratum",
     subtitle = "Adjusted LMM estimated marginal means with 95% CI"
   ) +
   theme_minimal(base_size = 12) +
@@ -153,6 +153,8 @@ p <- ggplot(plot_df, aes(x = month, y = emmean, color = stratum, fill = stratum,
     strip.background  = element_blank(),
     strip.text.y.left = element_text(angle = 90, face = "bold", size = 12),
     legend.position   = "bottom",
+    legend.title      = element_text(face = "bold", size = 12),
+    legend.text       = element_text(size = 11),
     plot.title        = element_text(face = "bold", size = 12.5)
   )
 

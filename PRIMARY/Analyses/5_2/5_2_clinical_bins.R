@@ -205,8 +205,8 @@ p <- ggplot() +
                       labels = c("Improved (Δ ≤ −5 mmHg)",
                                  "Stable (−5 < Δ < +5)",
                                  "Worsened (Δ ≥ +5)")) +
-  labs(x = "Baseline AHA stratum", y = "Proportion of Stratum (%)",
-       title = "Six-Month Blood Pressure Change by Baseline Stratum") +
+  labs(x = "Baseline AHA Stratum", y = "Proportion of Stratum (%)",
+       title = "6-Month Blood Pressure Change by Baseline AHA Stratum") +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid       = element_blank(),
@@ -214,11 +214,13 @@ p <- ggplot() +
     axis.line        = element_line(color = "black", linewidth = 0.4),
     axis.ticks       = element_line(color = "black", linewidth = 0.4),
     axis.text.x      = element_text(face = "bold"),
-    axis.title.x     = element_text(face = "bold", margin = margin(t = 16)),
-    axis.title.y     = element_text(face = "bold"),
+    axis.title.x     = element_text(face = "bold", size = 12, margin = margin(t = 16)),
+    axis.title.y     = element_text(face = "bold", size = 12),
     strip.text       = element_text(face = "bold", size = 12),
     legend.position  = "bottom",
-    plot.title       = element_text(face = "bold")
+    legend.title     = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 11),
+    plot.title       = element_text(face = "bold", size = 12.5)
   )
 
 out_png <- file.path(figures_dir, "5_2_figure_1b.png")

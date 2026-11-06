@@ -34,7 +34,7 @@ forest_labels <- c(
   LOG_N_BP_READINGS_STUDY              = "Blood Pressure Readings")
 order_top_to_bottom <- unname(forest_labels)   # y-axis top→bottom = this order
 
-outcome_cols <- c("SBP" = "#1f78b4", "DBP" = "#33a02c")
+outcome_cols <- c("SBP" = "#00538A", "DBP" = "#5B9BD5")
 
 build_forest <- function(df, title_txt, subtitle_txt) {
   df <- df %>%

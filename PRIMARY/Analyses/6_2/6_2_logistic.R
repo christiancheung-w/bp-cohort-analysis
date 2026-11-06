@@ -205,9 +205,11 @@ write_csv(coef_htn_naive, file.path(results_dir, "6_2_sensitivity_htn_naive.csv"
 
 # --- Emit standardized sizes for Table A (per SAP review v0.83) ---
 .cohort_label_map <- c(Primary = "hypertensive", FullCohort = "full", HTN_naive = "htn_naive")
-.n62_ceiling <- nrow(primary_cohort)
+.n62_ceiling <- c(Primary = nrow(primary_cohort), FullCohort = nrow(full_cohort),
+                  HTN_naive = nrow(htn_naive_cohort))   # each cohort's own entry N
 sizes_62 <- pmap_dfr(fit_meta, function(cohort, outcome, label) {
   fr <- fits[[label]]
+  ceil <- .n62_ceiling[[cohort]]   # before tibble(): its `cohort` column would shadow the argument
   tibble(
     section       = "6.2",
     role          = if (cohort == "Primary") "primary" else "sensitivity",
@@ -218,7 +220,7 @@ sizes_62 <- pmap_dfr(fit_meta, function(cohort, outcome, label) {
     n_users       = as.integer(fr$n),
     n_obs         = as.integer(fr$n),
     n_events      = as.integer(sum(model.response(model.frame(fr$fit)))),
-    ceiling_n     = .n62_ceiling
+    ceiling_n     = ceil
   )
 })
 emit_sizes(sizes_62, "6_2", results_dir)
@@ -356,7 +358,7 @@ forest_df <- coef_primary %>%
     sig_label  = ifelse(sig_005, "p < 0.005", "p ≥ 0.005")
   )
 
-outcome_cols <- c("SBP_responder" = "#1f78b4", "DBP_responder" = "#33a02c")
+outcome_cols <- c("SBP_responder" = "#00538A", "DBP_responder" = "#5B9BD5")
 
 p_forest <- ggplot(forest_df,
                    aes(x = OR, y = term_label,

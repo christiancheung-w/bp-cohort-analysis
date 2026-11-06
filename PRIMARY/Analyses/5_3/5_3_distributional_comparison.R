@@ -3,19 +3,23 @@
 #
 # Overlaid pre/post density plot, cohort-overall (no AHA stratification),
 # separately for SBP and DBP. Supplementary numeric: cohort-overall mean Δ
-# in mmHg + Cohen's d_z = mean(Δ) / SD(Δ).
+# in mmHg + standardized effect size d = mean(Δ) / pooled baseline SD of the
+# outcome (baseline-SD standardization; Kazis et al., Med Care 1989).
+# Harmonized with §5.1 Table 2 / §5.5 Table S3 (same denominator); numerator
+# is the empirical cohort-overall mean change (this section is model-free).
 #
 # Per SAP §5.3: no formal hypothesis test. Wilson CIs not applicable (continuous
 # outcome). 95% CI on mean Δ added for transparency.
 #
-# Cohort: §2.2 hypertensive (Elevated + Stage 1 + Stage 2). Users without both
-# baseline and MO6 for the given outcome are excluded from that outcome's
-# summary.
+# Cohort: §2.2 hypertensive (Elevated + Stage 1 + Stage 2) with sex recorded
+# (matches §5.1/§5.5). Users without both baseline and MO6 for the given
+# outcome are excluded from that outcome's Δ summary (baseline SD uses the full
+# cohort baseline, matching §5.1/§5.5).
 #
 # Input:  Build/derived/qc/user_analytic_frame_1X.rds
 #
 # Outputs (Analyses/5_3/derived/):
-#   results/5_3_summary_stats.csv         — outcome × {n, mean(Δ), SD(Δ), 95% CI, d_z}
+#   results/5_3_summary_stats.csv         — outcome × {n, mean(Δ), SD(Δ), 95% CI, d}
 #   results/5_3_paper.md                  — paper-ready text
 #   results/5_3_distributional_comparison.log
 #   figures/5_3_figure_1c.png             — overlaid baseline/MO6 densities, 2-panel
@@ -38,8 +42,18 @@ cat("§5.3 distributional comparison —", format(Sys.time(), "%Y-%m-%d %H:%M:%S
 # --- Read frame and filter to §2.2 cohort ---
 user_frame <- read_rds(input_path)
 cohort <- user_frame %>%
-  filter(BASELINE_AHA %in% c("Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"))
-cat("§2.2 cohort:", nrow(cohort), "users\n\n")
+  filter(BASELINE_AHA %in% c("Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"),
+         SEX %in% c("male", "female"))
+cat("§2.2 cohort (sex-restricted, matches §5.1/§5.5):", nrow(cohort), "users\n\n")
+
+# --- Cohort baseline SD: denominator for d (one value per outcome) ---
+# Pooled across strata; full-cohort baseline (matches §5.1/§5.5). Kazis (1989).
+baseline_sd <- cohort %>%
+  summarise(SBP = sd(BASELINE_SBP, na.rm = TRUE),
+            DBP = sd(BASELINE_DBP, na.rm = TRUE)) %>%
+  unlist()
+cat("Cohort baseline SD (d denominator):\n")
+cat("  SBP:", round(baseline_sd[["SBP"]], 4), " DBP:", round(baseline_sd[["DBP"]], 4), "\n\n")
 
 # --- Long format for density plot (one row per user × outcome × timepoint) ---
 density_long <- cohort %>%
@@ -49,7 +63,7 @@ density_long <- cohort %>%
                names_sep = "_",
                values_to = "value") %>%
   mutate(timepoint = factor(timepoint, levels = c("BASELINE", "MO6"),
-                            labels = c("Baseline", "6 months")),
+                            labels = c("Baseline", "6 Months")),
          outcome   = factor(outcome,   levels = c("SBP", "DBP"),
                             labels = c("SBP (mmHg)", "DBP (mmHg)"))) %>%
   filter(!is.na(value))
@@ -76,9 +90,9 @@ summary_stats <- paired %>%
     se_delta     = sd_delta / sqrt(n),
     ci_lcl       = mean_delta - 1.959964 * se_delta,
     ci_ucl       = mean_delta + 1.959964 * se_delta,
-    cohen_dz     = mean_delta / sd_delta,
     .groups = "drop"
-  )
+  ) %>%
+  mutate(d_baseline = mean_delta / unname(baseline_sd[outcome]))
 
 write_csv(summary_stats, file.path(results_dir, "5_3_summary_stats.csv"))
 
@@ -92,14 +106,14 @@ cutoff_df <- bind_rows(
 ) %>%
   mutate(outcome = factor(outcome, levels = c("SBP (mmHg)", "DBP (mmHg)")))
 
-tp_cols <- c("Baseline" = "#9E9E9E", "6 months" = "#478A43")
+tp_cols <- c("Baseline" = "#9E9E9E", "6 Months" = "#2A9D8F")
 
-# Label tibble for in-panel mean Δ + d_z annotation
+# Label tibble for in-panel mean Δ + d annotation
 label_df <- summary_stats %>%
   mutate(outcome = factor(ifelse(outcome == "SBP", "SBP (mmHg)", "DBP (mmHg)"),
                           levels = c("SBP (mmHg)", "DBP (mmHg)")),
-         lbl = sprintf("Mean Δ = %+.2f mmHg<br>95%% CI [%+.2f, %+.2f]<br>Cohen's *d* = %+.3f<br>n = %s",
-                       mean_delta, ci_lcl, ci_ucl, cohen_dz,
+         lbl = sprintf("Mean Δ = %+.2f mmHg<br>95%% CI [%+.2f, %+.2f]<br>*d* = %.3f<br>n = %s",
+                       mean_delta, ci_lcl, ci_ucl, abs(d_baseline),
                        format(n, big.mark = ",")))
 
 # Full outcome names become the per-panel x-axis titles (facet strip at bottom).
@@ -124,8 +138,8 @@ p <- ggplot(density_long, aes(x = value, fill = timepoint, color = timepoint)) +
             hjust = 1, vjust = 1, inherit.aes = FALSE,
             size = 3.4, lineheight = 1.1, fontface = "bold", color = "gray20",
             fill = NA, label.color = NA, label.padding = grid::unit(c(4, 5, 4, 5), "pt")) +
-  scale_fill_manual(values = tp_cols, name = NULL) +
-  scale_color_manual(values = tp_cols, name = NULL) +
+  scale_fill_manual(values = tp_cols, name = "Timepoint") +
+  scale_color_manual(values = tp_cols, name = "Timepoint") +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
   labs(
     x = NULL,
@@ -138,11 +152,14 @@ p <- ggplot(density_long, aes(x = value, fill = timepoint, color = timepoint)) +
     panel.spacing.y  = grid::unit(1.4, "lines"),
     axis.line        = element_line(color = "black", linewidth = 0.4),
     axis.ticks       = element_line(color = "black", linewidth = 0.4),
+    axis.title.y     = element_text(face = "bold", size = 12),
     strip.placement  = "outside",
     strip.background = element_blank(),
     strip.text       = element_text(face = "bold", size = 12),
     legend.position  = "bottom",
-    plot.title       = element_text(face = "bold", margin = margin(b = 12))
+    legend.title     = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 11),
+    plot.title       = element_text(face = "bold", size = 12.5, margin = margin(b = 12))
   )
 
 out_png <- file.path(figures_dir, "5_3_figure_1c.png")
@@ -163,10 +180,10 @@ md_lines <- c(
 for (otc in c("SBP", "DBP")) {
   s <- summary_stats %>% filter(outcome == otc)
   md_lines <- c(md_lines, sprintf(
-    "- **%s** (n = %s): mean Δ = %s mmHg (95%% CI [%s, %s]), SD(Δ) = %.2f mmHg, Cohen's d_z = %s.",
+    "- **%s** (n = %s): mean Δ = %s mmHg (95%% CI [%s, %s]), SD(Δ) = %.2f mmHg, *d* = %s.",
     otc, format(s$n, big.mark = ","),
     fmt_signed(s$mean_delta), fmt_signed(s$ci_lcl), fmt_signed(s$ci_ucl),
-    s$sd_delta, fmt_signed(s$cohen_dz, 3)
+    s$sd_delta, fmt_signed(s$d_baseline, 3)
   ))
 }
 md_lines <- c(md_lines,
@@ -174,9 +191,9 @@ md_lines <- c(md_lines,
   "## Notes",
   "",
   "- Cohort = §2.2 hypertensive (Elevated + Stage 1 + Stage 2). Cohort-overall means *no* stratification by AHA — these statistics aggregate across all three strata weighted by their cohort proportions.",
-  "- Per SAP §5.3, no formal hypothesis test. Effect-size frame is mean Δ in mmHg + Cohen's d_z (supplementary).",
+  "- Per SAP §5.3, no formal hypothesis test. Effect-size frame is mean Δ in mmHg + standardized *d* (supplementary).",
   "- The Stage 2 stratum is overrepresented in the absolute Δ contribution relative to its cohort share, because its per-user Δ magnitude is largest. Per-stratum effect sizes are reported in §5.1 Table 2; this section presents the cohort-level mean for distributional-shift reporting only.",
-  "- Cohen's d_z here is *purely empirical*: numerator = mean of paired (MO6 − Baseline) differences, denominator = SD of those differences. Different from §5.1 Table 2's d_z, which uses the LMM emmean Δ in the numerator. Both are valid; the §5.3 version is the conventional 'paired t' effect-size form.",
+  "- *d* here = (cohort-overall mean of paired MO6 − Baseline differences) / (pooled baseline SD of the outcome, all strata combined; Kazis et al., Med Care 1989). Same baseline-SD standardizer as §5.1 Table 2 / §5.5 Table S3; the numerator is the empirical cohort-overall mean change (this section is model-free), whereas §5.1/§5.5 use the adjusted LMM Δ per stratum. Signed (negative = BP reduction).",
   "- Pairs with: §5.1 trajectory analysis (provides per-stratum Δ), Figure 1C (this artifact)."
 )
 writeLines(md_lines, file.path(results_dir, "5_3_paper.md"))

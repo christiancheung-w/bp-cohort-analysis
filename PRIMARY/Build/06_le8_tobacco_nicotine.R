@@ -15,16 +15,23 @@
 #                                    with (TOBACCO == TRUE OR NICOTINE == TRUE).
 #                                    Both-logged days count once (per SAP §12.4).
 #   - N_TOBACCO_NICOTINE_LOGGED_DAYS Count of study-window days with ≥1 non-null
-#                                    entry for TOBACCO or NICOTINE (basis for
-#                                    EVER_LOGGED; includes user-no days).
+#                                    entry for TOBACCO or NICOTINE (includes
+#                                    "no" answers; data-coverage basis only).
 #   - LOG_TOBACCO_NICOTINE_USE_DAYS  log(N_USE_DAYS + 1).  Per SAP §12.4 — LE8
 #                                    primary predictor, intensity form.
-#   - TOBACCO_NICOTINE_EVER_LOGGED   Binary: TRUE if N_LOGGED_DAYS > 0.
-#                                    Per SAP §12.4 — LE8 primary predictor,
-#                                    binary user-vs-non-user indicator.
+#   - TOBACCO_NICOTINE_EVER_USED     Binary: TRUE if N_USE_DAYS > 0. Per SAP
+#                                    §12.4 — LE8 primary predictor, binary
+#                                    user-vs-non-user indicator (affirmative
+#                                    tobacco/nicotine use on ≥1 study-window day).
+#   - TOBACCO_NICOTINE_EVER_LOGGED   Binary: TRUE if N_LOGGED_DAYS > 0. Tracker-
+#                                    engagement / data-coverage flag ONLY (counts
+#                                    "no" answers); NOT a use indicator and NOT a
+#                                    model predictor — retained for completeness
+#                                    reporting.
 #
 # Users with no daily-pull rows OR only NA TOBACCO/NICOTINE entries land as:
-#   N_USE_DAYS = 0; N_LOGGED_DAYS = 0; LOG_USE_DAYS = 0; EVER_LOGGED = FALSE.
+#   N_USE_DAYS = 0; N_LOGGED_DAYS = 0; LOG_USE_DAYS = 0;
+#   EVER_USED = FALSE; EVER_LOGGED = FALSE.
 # Per SAP §12.4: "0 if the user never logs either tracker."
 
 library(tidyverse)
@@ -95,6 +102,7 @@ le8_tobacco_nicotine <- roster %>%
     N_TOBACCO_NICOTINE_USE_DAYS    = coalesce(N_TOBACCO_NICOTINE_USE_DAYS,    0L),
     N_TOBACCO_NICOTINE_LOGGED_DAYS = coalesce(N_TOBACCO_NICOTINE_LOGGED_DAYS, 0L),
     LOG_TOBACCO_NICOTINE_USE_DAYS  = log(N_TOBACCO_NICOTINE_USE_DAYS + 1),
+    TOBACCO_NICOTINE_EVER_USED     = N_TOBACCO_NICOTINE_USE_DAYS > 0,
     TOBACCO_NICOTINE_EVER_LOGGED   = N_TOBACCO_NICOTINE_LOGGED_DAYS > 0
   )
 
@@ -108,7 +116,10 @@ print(summary(le8_tobacco_nicotine$N_TOBACCO_NICOTINE_USE_DAYS))
 cat("\n=== Tobacco/Nicotine — logged-day distribution ===\n")
 print(summary(le8_tobacco_nicotine$N_TOBACCO_NICOTINE_LOGGED_DAYS))
 
-cat("\n=== EVER_LOGGED binary distribution ===\n")
+cat("\n=== EVER_USED binary distribution (§6.1 model predictor; N_USE_DAYS > 0) ===\n")
+print(le8_tobacco_nicotine %>% count(TOBACCO_NICOTINE_EVER_USED, name = "n"))
+
+cat("\n=== EVER_LOGGED binary distribution (coverage flag; NOT a predictor) ===\n")
 print(le8_tobacco_nicotine %>% count(TOBACCO_NICOTINE_EVER_LOGGED, name = "n"))
 
 cat("\n=== Users with N_USE_DAYS > 0 (any reported tobacco/nicotine use day) ===\n")

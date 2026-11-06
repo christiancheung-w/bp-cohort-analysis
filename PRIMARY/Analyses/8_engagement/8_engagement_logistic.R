@@ -341,6 +341,7 @@ print(model_summ, n = Inf)
 
 # --- emit_sizes: §8 ---
 ceiling_8 <- as.integer(nrow(cohort))
+ceiling_8_htn <- as.integer(sum(cohort$HTN_MED_BASELINE == "never_logged"))   # HTN-naive entry N
 get_n_events <- function(key) {
   fr <- fits[[key]]
   parts <- strsplit(key, "__", fixed = TRUE)[[1]]
@@ -387,7 +388,7 @@ sizes_8_sep_htn <- crossing(predictor = engagement_preds, outcome = c("SBP", "DB
     section = "8", role = "sensitivity", analysis = "Engagement separate logistic",
     cohort = "htn_naive", outcome = paste0(outcome, " responder"),
     predictor_set = predictor, n_users = as.integer(n_comp), n_obs = as.integer(n_comp),
-    n_events = as.integer(n_ev), ceiling_n = ceiling_8
+    n_events = as.integer(n_ev), ceiling_n = ceiling_8_htn
   )
 sizes_8_joint_htn <- tibble(outcome = c("SBP", "DBP")) %>%
   rowwise() %>%
@@ -401,7 +402,7 @@ sizes_8_joint_htn <- tibble(outcome = c("SBP", "DBP")) %>%
     section = "8", role = "sensitivity", analysis = "Engagement joint logistic",
     cohort = "htn_naive", outcome = paste0(outcome, " responder"),
     predictor_set = "joint", n_users = as.integer(n_comp), n_obs = as.integer(n_comp),
-    n_events = as.integer(n_ev), ceiling_n = ceiling_8
+    n_events = as.integer(n_ev), ceiling_n = ceiling_8_htn
   )
 sizes_8 <- bind_rows(sizes_8_sep_pri, sizes_8_joint_pri, sizes_8_sep_htn, sizes_8_joint_htn)
 emit_sizes(sizes_8, "8", results_dir)

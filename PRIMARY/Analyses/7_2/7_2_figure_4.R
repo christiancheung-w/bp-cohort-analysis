@@ -1,6 +1,6 @@
 # 7_2_figure_4.R
 # SAP §7.2 Figure 4: forest plot of standardized W/B-decomposed daily-signal
-# coefficients (β per SD of predictor) predicting same-day (BP − baseline).
+# coefficients (β per SD of predictor) predicting each reading's (BP − baseline).
 #
 # Mirrors the Figure 5 / §6.2 forest grammar (6_2_logistic.R): a SINGLE panel
 # with the two outcomes (SBP, DBP) overlaid as vertically-dodged coloured points
@@ -59,7 +59,7 @@ forest_df <- coefs_all %>%
     sig_label = ifelse(p_value < 0.005, "p < 0.005", "p ≥ 0.005")
   )
 
-outcome_cols <- c("SBP-baseline" = "#1f78b4", "DBP-baseline" = "#33a02c")
+outcome_cols <- c("SBP-baseline" = "#00538A", "DBP-baseline" = "#5B9BD5")
 
 p <- ggplot(forest_df,
             aes(x = estimate, y = term_label,
@@ -89,7 +89,7 @@ p <- ggplot(forest_df,
   labs(
     x = "β (mmHg from Baseline per SD of Predictor, 95% CI)",
     y = NULL,
-    title    = "Within- and Between-Person Wearable Biometric Associations With Same-Day Blood Pressure",
+    title    = "Within- and Between-Person Wearable Biometric Associations With Blood Pressure",
     subtitle = "Baseline-Anchored Within/Between-Person Decomposed Linear Mixed Model"
   ) +
   theme_minimal(base_size = 11) +

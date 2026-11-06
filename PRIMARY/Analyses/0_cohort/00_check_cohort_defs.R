@@ -5,7 +5,7 @@
 # numbers, and prints the hypertensive characteristic table with the new
 # between-stratum P-value column. Writes NO output files — console only.
 #
-# Run with working directory = project root (the dID_Analysis.Rproj folder).
+# Run with working directory = project root (the bp.Rproj folder).
 # -----------------------------------------------------------------------------
 
 library(tidyverse)

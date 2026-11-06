@@ -283,8 +283,14 @@ strata_rects <- bind_rows(
 ) %>%
   mutate(xmin = x - hw, xmax = x + hw, ymin = bot, ymax = top,
          fill = unname(aha_palette[cat]), xmid = x, ymid = (bot + top) / 2,
-         cat_lab = str_replace(cat, " Hypertension", "\nHypertension"),
-         lab     = sprintf("%s\n%.1f%%", cat_lab, 100 * tot / n_total))
+         lab  = sprintf("%.1f%%", 100 * tot / n_total))  # category names moved to legend
+
+# Legend built by hand: fill uses scale_fill_identity(), so map the categories
+# onto the otherwise-free `color` aesthetic via an invisible layer, relabelled
+# to short names (Normal, Elevated, Stage 1, Stage 2).
+legend_levels <- names(aha_palette)                       # in aha_order
+legend_labels <- str_remove(legend_levels, " Hypertension")
+legend_df     <- tibble(cat = factor(legend_levels, levels = legend_levels), x = 1, y = 0)
 
 p <- ggplot() +
   geom_polygon(data = slices, aes(px, py, group = poly, fill = fill), alpha = 1) +
@@ -292,26 +298,33 @@ p <- ggplot() +
             aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill),
             color = "white", linewidth = 0.4) +
   geom_text(data = strata_rects, aes(xmid, ymid, label = lab),
-            size = 2.6, fontface = "bold", color = "black", lineheight = 0.9) +
+            size = 5, fontface = "bold", color = "black") +
+  geom_point(data = legend_df, aes(x, y, color = cat), alpha = 0, inherit.aes = FALSE) +
   scale_fill_identity() +
+  scale_color_manual(values = setNames(unname(aha_palette), legend_levels),
+                     labels = legend_labels, name = "AHA Category",
+                     guide  = guide_legend(override.aes = list(alpha = 1, size = 5, shape = 15))) +
   scale_x_continuous(breaks = c(1, 2, 3),
-                     labels = c("Baseline", "6 months", "12 months"),
-                     expand = expansion(mult = c(0.10, 0.10))) +
+                     labels = c("Baseline", "6 Months", "12 Months"),
+                     expand = expansion(mult = c(0, 0.02))) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.03))) +
   labs(x = NULL, y = NULL,
-       title = "Reclassification Across AHA Blood Pressure Categories Through 12 Months") +
+       title = "12-Month Reclassification Across AHA Categories") +
   theme_minimal(base_size = 12) +
   theme(
-    panel.grid      = element_blank(),
-    axis.text.y     = element_blank(),
-    axis.ticks      = element_blank(),
-    axis.text.x     = element_text(face = "bold", size = 12),
-    legend.position = "none",
-    plot.title      = element_text(face = "bold")
+    panel.grid         = element_blank(),
+    axis.text.y        = element_blank(),
+    axis.ticks         = element_blank(),
+    axis.text.x        = element_text(face = "bold", size = 12),
+    legend.position    = "right",
+    legend.title       = element_text(face = "bold", size = 12),
+    legend.text        = element_text(size = 11),
+    legend.box.spacing = grid::unit(3, "pt"),
+    plot.title         = element_text(face = "bold", size = 12.5)
   )
 
 out_png <- file.path(figures_dir, "5_5_figure_aha_12mo.png")
-ggsave(out_png, p, width = 10, height = 6.5, dpi = 300)
+ggsave(out_png, p, width = 10.5, height = 6.5, dpi = 300)
 cat("\nWrote figure (3-axis gradient alluvial):\n  ", out_png, "\n")
 
 # --- Paper-ready markdown ---

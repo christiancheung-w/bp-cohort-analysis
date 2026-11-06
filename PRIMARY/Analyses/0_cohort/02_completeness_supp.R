@@ -83,12 +83,11 @@ user_spec <- c(
     list(section = "Predictor — behavioral study-window mean (§6.1)", label = "Sleep duration (study mean)",       cols = "SLEEP_DURATION_STUDY_MEAN"),
     list(section = "Predictor — behavioral study-window mean (§6.1)", label = "Strain (study mean)",               cols = "STRAIN_STUDY_MEAN"),
     list(section = "Predictor — behavioral study-window mean (§6.1)", label = "Tobacco/nicotine use days (log)",   cols = "LOG_TOBACCO_NICOTINE_USE_DAYS"),
-    list(section = "Predictor — behavioral study-window mean (§6.1)", label = "Tobacco/nicotine ever logged",      cols = "TOBACCO_NICOTINE_EVER_LOGGED"),
     list(section = "Predictor — engagement (§8)", label = "% days journaled",                cols = "PCT_DAYS_JOURNALED"),
     list(section = "Predictor — engagement (§8)", label = "Avg daily time in app (log)",      cols = "LOG_AVG_DAILY_TIME_IN_APP_MIN"),
     list(section = "Predictor — engagement (§8)", label = "% days engaged w/ notifications",  cols = "PCT_DAYS_ENGAGED_NOTIFICATIONS"),
     list(section = "Predictor — engagement (§8)", label = "% days used AI Coach",             cols = "PCT_DAYS_USED_COACH"),
-    list(section = "Predictor — engagement (§8)", label = "Sleep % of target",                cols = "SLEEP_PCT_OF_TARGET"),
+    list(section = "Predictor — engagement (§8)", label = "Avg sleep-need fulfillment (%)",   cols = "AVG_SLEEP_NEED_PCT"),
     list(section = "Predictor — engagement (§8)", label = "% days met optimal strain",        cols = "PCT_DAYS_MET_OPTIMAL_STRAIN"),
     list(section = "Predictor — engagement (§8)", label = "N BP readings, study (log)",        cols = "LOG_N_BP_READINGS_STUDY")
   )

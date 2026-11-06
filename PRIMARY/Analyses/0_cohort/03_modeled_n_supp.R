@@ -6,6 +6,16 @@
 # objects (approach A2) — never recomputed here — so Table A cannot disagree
 # with the reported model results.
 #
+# SBP/DBP FOLD: chapters emit one row per fitted model, so SBP and DBP appear as
+# separate rows even though they share the same modeling frame (identical
+# n_users / n_obs; only n_events differs for logistic models). This aggregator
+# folds each SBP/DBP twin into a single row for the reader-facing table — the
+# per-chapter _sizes_std.csv files remain one-row-per-model, so the source audit
+# trail is untouched. The SBP/DBP axis lives in `outcome` for most chapters but
+# in `predictor_set` for §7.1, so the fold auto-detects which column holds it.
+# Guardrail: if n_users / n_obs are NOT identical within a fold group the script
+# STOPS — the collapse doubles as a validity check.
+#
 # Split by `role` into two tables:
 #   Table A    — primary modeled analyses (the headline n's)
 #   Table A.2  — sensitivity-analysis n's (companion)
@@ -16,8 +26,8 @@
 # Run with working directory = project root.
 #
 # Outputs (Analyses/0_cohort/derived/results/):
-#   table_A_modeled_n.csv          (primary)
-#   table_A2_sensitivity_n.csv     (sensitivity)
+#   table_A_modeled_n.csv          (primary, SBP/DBP folded)
+#   table_A2_sensitivity_n.csv     (sensitivity, SBP/DBP folded)
 #   table_A_modeled_n_paper.md     (both, with descriptions)
 #   03_modeled_n_supp.log
 # -----------------------------------------------------------------------------
@@ -41,29 +51,73 @@ cat("Found", length(files), "chapter size file(s):\n")
 for (f in files) cat("  ", f, "\n")
 if (length(files) == 0) stop("No *_sizes_std.csv files found — run the instrumented chapter scripts first.")
 
-all_sizes <- map_dfr(files, ~ read_csv(.x, show_col_types = FALSE)) %>%
-  mutate(`% of ceiling` = sprintf("%.1f", 100 * n_users / ceiling_n))
+all_sizes <- map_dfr(files, ~ read_csv(.x, show_col_types = FALSE))
 
-primary <- all_sizes %>% filter(role == "primary")     %>% arrange(section, cohort, outcome, predictor_set)
-sens    <- all_sizes %>% filter(role == "sensitivity")  %>% arrange(section, cohort, outcome, predictor_set)
+# --- SBP/DBP fold -------------------------------------------------------------
+# Detect the SBP/DBP token in whichever field carries it (outcome for most
+# chapters, predictor_set for §7.1), strip it to form the fold key, and collapse
+# each twin to one row. `bp` labels which side each source row is, so n_events
+# can be surfaced as a paired "SBP / DBP" value.
+fmtnum      <- function(x) ifelse(is.na(x), "", format(x, big.mark = ","))
+classify_bp <- function(x) ifelse(grepl("SBP", x), "SBP",
+                            ifelse(grepl("DBP", x), "DBP", NA_character_))
+strip_bp    <- function(x) trimws(gsub("\\s+", " ", gsub("\\b(SBP|DBP)\\b", "", x)))
 
-write_csv(primary, file.path(results_dir, "table_A_modeled_n.csv"))
-write_csv(sens,    file.path(results_dir, "table_A2_sensitivity_n.csv"))
-cat("\n--- Table A (primary) ---\n");     print(as.data.frame(primary), row.names = FALSE)
-cat("\n--- Table A.2 (sensitivity) ---\n"); print(as.data.frame(sens),  row.names = FALSE)
+folded <- all_sizes %>%
+  mutate(
+    bp          = coalesce(classify_bp(outcome), classify_bp(predictor_set)),
+    outcome     = strip_bp(outcome),
+    predictor_set = strip_bp(predictor_set)
+  ) %>%
+  group_by(section, role, analysis, cohort, outcome, predictor_set) %>%
+  summarise(
+    n_user_distinct = n_distinct(n_users),
+    n_obs_distinct  = n_distinct(n_obs),
+    n_users      = first(n_users),
+    n_obs        = first(n_obs),
+    n_events_SBP = n_events[bp == "SBP"][1],
+    n_events_DBP = n_events[bp == "DBP"][1],
+    ceiling_n    = first(ceiling_n),
+    .groups = "drop"
+  )
+
+# Guardrail: a fold group must share one n_users and one n_obs, or the collapse
+# would hide a real discrepancy between the SBP and DBP fits.
+bad <- folded %>% filter(n_user_distinct > 1 | n_obs_distinct > 1)
+if (nrow(bad) > 0) {
+  cat("\n!! Unsafe fold — n_users/n_obs differ within these SBP/DBP groups:\n")
+  print(as.data.frame(bad[, c("section", "analysis", "cohort", "predictor_set",
+                              "n_user_distinct", "n_obs_distinct")]), row.names = FALSE)
+  stop("Refusing to fold groups with non-identical n_users/n_obs (see above).")
+}
+
+folded <- folded %>%
+  mutate(`% of ceiling` = sprintf("%.1f", 100 * n_users / ceiling_n)) %>%
+  select(section, role, analysis, cohort, predictor_set, outcome,
+         n_users, n_obs, n_events_SBP, n_events_DBP, ceiling_n, `% of ceiling`)
+
+primary <- folded %>% filter(role == "primary")     %>% arrange(section, cohort, predictor_set, outcome)
+sens    <- folded %>% filter(role == "sensitivity")  %>% arrange(section, cohort, predictor_set, outcome)
+
+out_cols <- setdiff(names(folded), "role")   # role is implied by which file
+write_csv(primary[, out_cols], file.path(results_dir, "table_A_modeled_n.csv"))
+write_csv(sens[,    out_cols], file.path(results_dir, "table_A2_sensitivity_n.csv"))
+cat("\n--- Table A (primary) ---\n");      print(as.data.frame(primary[, out_cols]), row.names = FALSE)
+cat("\n--- Table A.2 (sensitivity) ---\n"); print(as.data.frame(sens[, out_cols]),  row.names = FALSE)
 
 # --- Markdown rendering -------------------------------------------------------
 mk_row <- function(cells) paste0("| ", paste(cells, collapse = " | "), " |")
 HDR <- c("Section", "Analysis", "Cohort", "Outcome", "Predictor set",
-         "n_users", "n_obs", "n_events", "ceiling_n", "% of ceiling")
+         "n_users", "n_obs", "n_events (SBP/DBP)", "ceiling_n", "% of ceiling")
 render_tbl <- function(df) {
   if (nrow(df) == 0) return("_(none instrumented yet)_")
-  fmtnum <- function(x) ifelse(is.na(x), "", format(x, big.mark = ","))
   rows <- map_chr(seq_len(nrow(df)), function(i) {
     r <- df[i, ]
+    nobs_disp <- if (!is.na(r$n_obs) && r$n_obs == r$n_users) "" else fmtnum(r$n_obs)
+    ev <- if (is.na(r$n_events_SBP) && is.na(r$n_events_DBP)) "" else
+            paste0(fmtnum(r$n_events_SBP), " / ", fmtnum(r$n_events_DBP))
     mk_row(c(r$section, r$analysis, r$cohort, r$outcome, r$predictor_set,
-             fmtnum(r$n_users), fmtnum(r$n_obs), fmtnum(r$n_events),
-             fmtnum(r$ceiling_n), r$`% of ceiling`))
+             fmtnum(r$n_users), nobs_disp, ev, fmtnum(r$ceiling_n), r$`% of ceiling`))
   })
   c(mk_row(HDR), paste0("|", strrep("---|", length(HDR))), rows)
 }
@@ -73,13 +127,13 @@ md <- c(
   "",
   paste0("_Generated ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "_"),
   "",
-  "Each row is one fitted model. The n's are **read directly from the fitted model objects** (not recomputed for this table), so they match the reported results exactly. This is a rolling supplement — it contains the analyses instrumented so far, split into the primary analyses (Table A) and the sensitivity analyses (Table A.2).",
+  "Each row is one modeled analysis. SBP and DBP are fit on the same modeling frame, so their rows share `n_users`/`n_obs` and are combined here; where they genuinely differ — logistic event counts — both are shown as `SBP / DBP`. The n's are **read directly from the fitted model objects** (not recomputed for this table), so they match the reported results exactly. This is a rolling supplement — it contains the analyses instrumented so far, split into the primary analyses (Table A) and the sensitivity analyses (Table A.2).",
   "",
   "**Column definitions**",
   "",
-  "- **n_users** — distinct participants contributing to the model.",
-  "- **n_obs** — observations (model rows): equals `n_users` for cross-sectional models; for longitudinal LMMs it is participant × timepoint, so `n_obs` > `n_users` when participants contribute multiple timepoints.",
-  "- **n_events** — number of outcome events for logistic models (e.g. responders); blank for continuous outcomes.",
+  "- **n_users** — distinct participants contributing to the model (identical for the SBP and DBP fits).",
+  "- **n_obs** — observations (model rows). Blank when it equals `n_users` (cross-sectional model); populated only for longitudinal LMMs, where it is participant × timepoint.",
+  "- **n_events (SBP/DBP)** — outcome events for logistic models (e.g. responders), shown as the SBP and DBP counts; blank for continuous outcomes.",
   "- **ceiling_n** — the maximum possible N for the analysis: its cohort entry count *before* any outcome/covariate complete-casing. For the sex-restricted modeling cohorts this is the modeled N (e.g. 20,003) — i.e. Table B's descriptive denominator (20,021) minus the sex-excluded users.",
   "- **% of ceiling** — `n_users / ceiling_n`: the share of the cohort the model retained. Attrition below 100% is explained variable-by-variable in **Table B** (e.g. a model requiring ΔHbA1c retains only the ~1.9% of the cohort with paired HbA1c; an LMM needing only baseline covariates retains ~100% bar the few BMI-missing).",
   "",
